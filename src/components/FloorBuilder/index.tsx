@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { ReactChild, useEffect, useRef, useState } from 'react';
 import { defaultFloor } from '../../utils/constants';
 import { Grid, GRID_HEIGHT, GRID_WIDTH } from './components/Grid';
 
-const delta = 20;
+const delta = GRID_HEIGHT;
 let startX:number;
 let startY:number;
 let isCapturing:boolean;
@@ -16,32 +16,25 @@ enum MODE {
     LINE,
     RECTANGLE
 }
-
+const n = 40
 export function FloorBuilder ({}) {
-    const [floor, setFloor] = useState(defaultFloor);
-    const [estimateFloor,setEstimateFloor] = useState(defaultFloor)
-    const [highlightedCoordinate, setHighLightedCoordinate] = useState<null | [number, number]>()
+    const [floor, setFloor] = useState<string[][]>(Array.from({length: n},()=> Array.from({length: n}, () => '_')));
+    const [estimateFloor,setEstimateFloor] = useState<string[][]>(Array.from({length: n},()=> Array.from({length: n}, () => '_')))
     const [offset, setOffset] = useState<[number, number] | undefined>(undefined)
     const [estimatedBold, setEstimatedBold] = useState<string[] | []>([])
-    const [mode, setMode] = useState<MODE>(MODE.RECTANGLE)
+    const [mode, setMode] = useState<MODE>(MODE.LINE)
     const ref = useRef<any>()
     
     const renderFloor = () => {
-        return floor.map((row,i) => <div key={i} onLoad={(event) => console.log(event)} style={{display:'flex', flexDirection:'row'}}>
-            {row.map((col, j) => {
-                
-                let possibleValue = estimateFloor[i][j] !== "_" ? estimateFloor[i][j] : col
-                return <Grid key={`${i}-${j}`} i={i} j={j} value={possibleValue}/>
-            })}
-        </div>)
+        return floor.map((row,i) => <GridRow estimateFloor={estimateFloor} row={row} key={i} i={i}/>)
     }
 
     useEffect(() => {
-        if(ref){
+        if(ref && floor){
             let bb = ref.current.getBoundingClientRect();
             setOffset([bb.x, bb.y])
         }
-    }, [ref])
+    }, [ref, floor])
 
     const onMouseDown =  (event:React.MouseEvent) => {
         const { pageX, pageY } = event;
@@ -76,8 +69,7 @@ export function FloorBuilder ({}) {
     const onMouseMove = (event: React.MouseEvent) => {
         event.preventDefault()
         const { pageX, pageY } = event;
-        const highlighted = getCoordinate([pageX, pageY])
-        setHighLightedCoordinate(highlighted)
+        
         if(isCapturing){ //should be on pencil mode
             if(mode === MODE.PENCIL){
                 boldify([getCoordinate([pageX, pageY]).join(',')])
@@ -193,9 +185,53 @@ export function FloorBuilder ({}) {
     return <div style={{alignItems:'center', display:'flex',flexDirection:'column', justifyContent:'center', height:'100vh'}}>
         <div style={{position:'relative'}}>
             {renderFloor()}
-            <div ref={ref} onMouseMove={onMouseMove} onMouseDown={onMouseDown} onMouseUp={onMouseUp} style={{width:'100%',height:'100%',top:0,right:0, position:'absolute'}}>
-                {highlightedCoordinate && <div style={{height: GRID_HEIGHT, width:GRID_WIDTH, position:'absolute', backgroundColor:'lightgreen', top:highlightedCoordinate[1] * (GRID_HEIGHT+1), left:highlightedCoordinate[0] * (GRID_HEIGHT+1)}}/>}
-            </div>
+            <Overlay 
+                refX={ref}
+                onMouseDown={onMouseDown}
+                onMouseMove={onMouseMove}
+                onMouseUp={onMouseUp}
+                getCoordinate={getCoordinate}
+            />
         </div>
     </div>
 }
+
+type OverlayType = {
+    refX: React.MutableRefObject<any>,
+    onMouseDown: React.MouseEventHandler<HTMLDivElement>,
+    onMouseMove: React.MouseEventHandler<HTMLDivElement>,
+    onMouseUp: React.MouseEventHandler<HTMLDivElement>,
+    getCoordinate: (coordinate: [number, number]) => [number, number]
+}
+
+const Overlay = ({refX, onMouseDown, onMouseMove, onMouseUp, getCoordinate}: OverlayType) => {
+    const [highlightedCoordinate, setHighLightedCoordinate] = useState<null | [number, number]>() 
+
+    const onMouseMoveHandler = (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
+        const { pageX, pageY } = event;
+        const highlighted = getCoordinate([pageX, pageY])
+        setHighLightedCoordinate(highlighted)
+        onMouseMove(event);
+    }
+    return <div ref={refX} onMouseMove={onMouseMoveHandler} onMouseDown={onMouseDown} onMouseUp={onMouseUp} style={{width:'100%',height:'100%',top:0,right:0, position:'absolute'}}>
+        {highlightedCoordinate && <div style={{height: GRID_HEIGHT, width:GRID_WIDTH, position:'absolute', backgroundColor:'lightgreen', top:highlightedCoordinate[1] * (GRID_HEIGHT+1), left:highlightedCoordinate[0] * (GRID_HEIGHT+1)}}/>}
+    </div>
+}
+
+type GridRowXType = {
+    row: string[],
+    i: number,
+    estimateFloor: string[][]
+}
+
+const GridRowX = ({row, i, estimateFloor}: GridRowXType) => {
+    return <div key={i} style={{display:'flex', flexDirection:'row'}}>
+        {row.map((col, j) => {
+            
+            let possibleValue = estimateFloor[i][j] !== "_" ? estimateFloor[i][j] : col
+            return <Grid key={`${i}-${j}`} i={i} j={j} value={possibleValue}/>
+        })}
+    </div>
+}
+
+const GridRow = React.memo(GridRowX)
